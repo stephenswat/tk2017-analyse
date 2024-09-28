@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html class="ocks-org do-not-copy"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><meta charset="utf-8">
+<style>
+#circle circle {
+  fill: none;
+  pointer-events: all;
+}
+
+.group path {
+  fill-opacity: .5;
+}
+
+path.chord {
+  opacity: 0.8
+}
+
+#circle:hover path.fade {
+  display: none;
+}
+
+#graph {
+  margin: auto;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+}
+
+.group-label {
+    /*text-anchor: middle;*/
+    font-family: sans;
+}
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3-queue/1.2.3/queue.min.js"></script>
+</head>
+
+<body>
+
+<script>
+
+var width = 720,
+    height = 720,
+    outerRadius = Math.min(width, height) / 2 - 10,
+    innerRadius = outerRadius - 24;
+
+var formatPercent = d3.format(".1%");
+
+function descending(a, b) {
+    console.log(a)
+  return b < a ? -1 : b > a ? 1 : b >= a ? 0 : NaN;
+}
+
+var arc = d3.svg.arc().innerRadius(innerRadius).outerRadius(outerRadius);
+
+var layout = d3.layout.chord().padding(.04).sortSubgroups(d3.descending).sortChords(d3.ascending);
+
+var path = d3.svg.chord().radius(innerRadius);
+
+var svg = d3.select("body").append("svg")
+    .attr("id", "graph")
+    .attr("width", width)
+    .attr("height", height)
+  .append("g")
+    .attr("id", "circle")
+    .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
+
+svg.append("circle")
+    .attr("r", outerRadius);
+
+queue()
+    .defer(d3.csv, "cities.csv")
+    .defer(d3.json, "matrix.json")
+    .await(ready);
+
+function ready(error, cities, matrix) {
+  if (error) throw error;
+
+  // Compute the chord layout.
+  layout.matrix(matrix);
+
+  // Add a group per neighborhood.
+  var group = svg.selectAll(".group")
+      .data(layout.groups)
+    .enter().append("g")
+      .attr("class", "group")
+      .on("mouseover", mouseover);
+
+  // Add a mouseover title.
+  group.append("title").text(function(d, i) {
+    return cities[i].name + ": " + cities[i].seats + " zetels";
+  });
+
+  // Add the group arc.
+  var groupPath = group.append("path")
+      .attr("id", function(d, i) { return "group" + i; })
+      .attr("d", arc)
+      .style("fill", function(d, i) { return cities[i].color; });
+
+  // Add a text label.
+  var groupText = group.append("text").attr("dy", 18).attr("class", "group-label");
+
+  groupText.append("textPath")
+      .attr("xlink:href", function(d, i) { return "#group" + i; })
+      .text(function(d, i) { return cities[i].name; })
+
+  var grads = svg.append("defs").selectAll("linearGradient")
+    .data(layout.chords)
+    .enter().append("linearGradient")
+    //Create a unique gradient id per chord: e.g. "chordGradient-0-4"
+    .attr("id", function(d) { return "chordGradient-" + d.source.index + "-" + d.target.index; })
+    //Instead of the object bounding box, use the entire SVG for setting locations
+    //in pixel locations instead of percentages (which is more typical)
+    .attr("gradientUnits", "userSpaceOnUse")
+    //The full mathematical formula to find the x and y locations of the Avenger's source chord
+    .attr("x1", function(d,i) {
+        return innerRadius*Math.cos((d.source.endAngle-d.source.startAngle)/2+d.source.startAngle-Math.PI/2);
+    })
+    .attr("y1", function(d,i) {
+        return innerRadius*Math.sin((d.source.endAngle-d.source.startAngle)/2+d.source.startAngle-Math.PI/2);
+    })
+    //Find the location of the target Avenger's chord
+    .attr("x2", function(d,i) {
+        return innerRadius*Math.cos((d.target.endAngle-d.target.startAngle)/2+d.target.startAngle-Math.PI/2);
+    })
+    .attr("y2", function(d,i) {
+        return innerRadius*Math.sin((d.target.endAngle-d.target.startAngle)/2+d.target.startAngle-Math.PI/2);
+    });
+
+    grads.append("stop")
+    .attr("offset", "0%")
+    .attr("stop-color", function(d){ return cities[d.source.index].color; });
+
+    //Set the ending color (at 100%)
+    grads.append("stop")
+        .attr("offset", "100%")
+        .attr("stop-color", function(d){ return cities[d.target.index].color; });
+
+
+  // Add the chords.
+  var chord = svg.selectAll(".chord")
+      .data(layout.chords)
+    .enter().append("path")
+      .attr("class", "chord")
+      .style("fill", function(d){ return "url(#chordGradient-" + d.source.index + "-" + d.target.index + ")"; })
+      .attr("d", path);
+
+  // Add an elaborate mouseover title for each chord.
+  chord.append("title").text(function(d) {
+    return cities[d.source.index].name + " met " + cities[d.target.index].name;
+  });
+
+  function mouseover(d, i) {
+    chord.classed("fade", function(p) {
+      return p.source.index != i
+          && p.target.index != i;
+    });
+  }
+}
+</script>
+</body></html>
